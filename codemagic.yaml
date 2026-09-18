@@ -6,6 +6,8 @@ workflows:
     scripts:
       - name: Clean project
         script: flutter clean
+      - name: Recreate Android platform properly
+        script: flutter create . --platforms=android --org com.uniled.pro
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build Release APK
