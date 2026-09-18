@@ -3,7 +3,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 class BleService {
   // Bluetooth taramasını başlatır
   Future<void> startScan() async {
-    // Bluetooth açık mı kontrol edip tarama başlatır
     if (await FlutterBluePlus.isSupported == false) {
       return;
     }
@@ -15,6 +14,32 @@ class BleService {
     await FlutterBluePlus.stopScan();
   }
 
-  // Tarama sonuçlarını dinlemek için akış (stream)
+  // Tarama sonuçlarını dinlemek için akış
   Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
+
+  // Bluetooth cihazına bağlanma fonksiyonu
+  Future<void> connect(BluetoothDevice device) async {
+    try {
+      await device.connect(autoConnect: false);
+    } catch (e) {
+      // Bağlantı hatası durumunda loglanabilir
+      print("Bağlantı hatası: $e");
+    }
+  }
+
+  // LED'lere renk komutu gönderme fonksiyonu
+  Future<void> sendColor(BluetoothDevice device, List<int> colorData) async {
+    try {
+      List<BluetoothService> services = await device.discoverServices();
+      for (var service in services) {
+        for (var characteristic in service.characteristics) {
+          if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+            await characteristic.write(colorData);
+          }
+        }
+      }
+    } catch (e) {
+      print("Renk gönderme hatası: $e");
+    }
+  }
 }
