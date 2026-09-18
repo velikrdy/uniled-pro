@@ -117,9 +117,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
                     icon: const Icon(Icons.animation),
-                    label: const Text("Akışkan Animasyonu Başlat"),
+                    label: const Text("Özel Efekt Gönder"),
                     onPressed: () {
-                      widget.engine.startRainbowEffect(); // Örnek motor tetiklemesi
+                      widget.ble.sendColor(_connectedDevice!, [255, 128, 0]);
                     },
                   ),
                   const SizedBox(height: 12),
