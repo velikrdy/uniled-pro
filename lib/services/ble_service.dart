@@ -1,12 +1,12 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class BleService {
-  final FlutterBluePlus _ble = FlutterBluePlus.instance;
+  final FlutterBluePlus _ble = FlutterBluePlus;
 
-  Stream<List<ScanResult>> get scanResults => _ble.scanResults;
+  Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
 
-  Future<void> startScan() async => _ble.startScan(timeout: const Duration(seconds: 4));
-  Future<void> stopScan() async => _ble.stopScan();
+  Future<void> startScan() async => FlutterBluePlus.startScan(timeout: const Duration(seconds: 4));
+  Future<void> stopScan() async => FlutterBluePlus.stopScan();
   Future<void> connect(BluetoothDevice d) async => await d.connect(autoConnect: false);
   Future<void> disconnect(BluetoothDevice d) async => await d.disconnect();
 
