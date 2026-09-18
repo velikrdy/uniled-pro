@@ -1,4 +1,4 @@
-import 'package:flutter/material.dev.dart' if (dart.library.html) 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 
