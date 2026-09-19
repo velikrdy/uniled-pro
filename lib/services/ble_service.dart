@@ -77,24 +77,26 @@ class BleService {
     }
   }
 
-  Future<void> sendColor(int red, int green, int blue, [int brightness = 255]) async {
+  // Arayüzle uyumlu olması için metot adları 'set...' olarak güncellendi:
+  
+  Future<void> setColor(int red, int green, int blue, [int brightness = 255]) async {
     int checksum = (0x56 + red + green + blue + 0x00) & 0xFF;
     List<int> packet = [0x56, red, green, blue, 0x00, 0xF0, checksum];
     await _writePacket(packet);
   }
 
-  Future<void> sendPower(bool isOn) async {
+  Future<void> setPower(bool isOn) async {
     List<int> packet = isOn ? [0xCC, 0x23, 0x33] : [0xCC, 0x24, 0x33];
     await _writePacket(packet);
   }
 
-  Future<void> sendMode(int modeId, int speed) async {
+  Future<void> setMode(int modeId, int speed) async {
     int safeSpeed = speed.clamp(1, 100);
     List<int> packet = [0xBB, modeId & 0xFF, safeSpeed, 0x44];
     await _writePacket(packet);
   }
 
-  Future<void> sendWelcomeFarewell(int type, int modeIndex, int durationSec) async {
+  Future<void> setWelcomeFarewell(int type, int modeIndex, int durationSec) async {
     int safeDuration = durationSec.clamp(5, 120);
     List<int> packet = [0xDD, type & 0xFF, modeIndex & 0xFF, safeDuration & 0xFF, 0x55];
     await _writePacket(packet);
