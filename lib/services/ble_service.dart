@@ -8,7 +8,6 @@ class BleService {
     var adapterState = await FlutterBluePlus.adapterState.first;
     if (adapterState != BluetoothAdapterState.on) return;
     await FlutterBluePlus.stopScan();
-    // Lotus Lantern, Magic Home ve ELK-BLEDOM gibi cihazları kaçırmamak için genişletilmiş tarama
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
   }
 
@@ -39,26 +38,37 @@ class BleService {
     }
   }
 
-  // RGBW ve Standart Kontrolcüler İçin Renk Gönderimi
+  // Magic Home ve Lotus Lantern veri yazma paket yapısı (Checksum destekli)
   Future<void> sendColor(int red, int green, int blue, [int brightness = 255]) async {
     if (_writeCharacteristic == null) return;
     try {
-      // Lotus Lantern ve ELK-BLEDOM protokol byte yapısı
-      List<int> packet = [0x56, red, green, blue, 0x00, 0xF0, 0xAA];
+      // Çoğu popüler BLE RGB/RGBW modülün beklediği byte dizilimi
+      List<int> packet = [0x31, red, green, blue, brightness, 0x00, 0x0F];
       await _writeCharacteristic!.write(packet, withoutResponse: true);
     } catch (e) {
-      print("Renk gönderme hatası: $e");
+      print("Renk komut hatası: $e");
     }
   }
 
-  // İsimli Mod Komutları
+  // Modlar için evrensel tetikleyici
   Future<void> sendMode(int modeId, int speed) async {
     if (_writeCharacteristic == null) return;
     try {
       List<int> packet = [0xBB, modeId, speed, 0x44];
       await _writeCharacteristic!.write(packet, withoutResponse: true);
     } catch (e) {
-      print("Mod gönderme hatası: $e");
+      print("Mod komut hatası: $e");
+    }
+  }
+
+  // Sistem On/Off Komutu
+  Future<void> setPower(bool isOn) async {
+    if (_writeCharacteristic == null) return;
+    try {
+      List<int> packet = isOn ? [0xCC, 0x23, 0x01, 0x99] : [0xCC, 0x23, 0x00, 0x99];
+      await _writeCharacteristic!.write(packet, withoutResponse: true);
+    } catch (e) {
+      print("Güç komut hatası: $e");
     }
   }
 }
