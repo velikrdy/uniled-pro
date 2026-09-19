@@ -77,8 +77,6 @@ class BleService {
     }
   }
 
-  // Arayüzle uyumlu olması için metot adları 'set...' olarak güncellendi:
-  
   Future<void> setColor(int red, int green, int blue, [int brightness = 255]) async {
     int checksum = (0x56 + red + green + blue + 0x00) & 0xFF;
     List<int> packet = [0x56, red, green, blue, 0x00, 0xF0, checksum];
