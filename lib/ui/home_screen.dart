@@ -17,12 +17,27 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   BluetoothDevice? _connectedDevice;
+  late TabController _tabController;
+  
+  // Renk ve Mod Parametreleri
+  double _red = 255;
+  double _green = 0;
+  double _blue = 0;
+  int _selectedMode = 1;
+  int _animationSpeed = 50;
+
+  // Selamlama ve Veda Ayarları
+  String _welcomeMode = "Yavaş Renk Geçişi";
+  double _welcomeDuration = 3.0;
+  String _farewellMode = "Flaş / Çakar";
+  double _farewellDuration = 2.0;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     widget.ble.startScan();
   }
 
@@ -31,16 +46,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_connectedDevice == null ? "UniLED Pro v2 - Cihaz Seç" : "UniLED Pro v2 - Kontrol Paneli"),
+        bottom: _connectedDevice != null ? TabControllerBar(_tabController) : null,
         actions: [
           if (_connectedDevice != null)
             IconButton(
               icon: const Icon(Icons.link_off),
-              tooltip: "Bağlantıyı Kes",
               onPressed: () async {
                 await _connectedDevice?.disconnect();
-                setState(() {
-                  _connectedDevice = null;
-                });
+                setState(() => _connectedDevice = null);
                 widget.ble.startScan();
               },
             ),
@@ -51,31 +64,21 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _connectedDevice == null
-          // 1. DURUM: Cihaz bağlı değilse Bluetooth Tarama Listesi Göster
           ? StreamBuilder<List<ScanResult>>(
               stream: widget.ble.scanResults,
               builder: (context, snapshot) {
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text("Bluetooth cihazları aranıyor..."),
-                      ],
-                    ),
-                  );
+                  return const Center(child: CircularProgressIndicator());
                 }
                 return ListView(
                   children: snapshot.data!.map((r) => ListTile(
-                    leading: const Icon(Icons.bluetooth, color: Colors.blue),
-                    title: Text(r.device.name.isEmpty ? 'Bilinmeyen Cihaz' : r.device.name),
+                    leading: const Icon(Icons.bluetooth, color: Colors.blueAccent),
+                    title: Text(r.device.name.isEmpty ? 'Bilinmeyen RGB Cihaz' : r.device.name),
                     subtitle: Text(r.device.id.toString()),
                     trailing: ElevatedButton(
                       onPressed: () async {
-                        await widget.ble.connect(r.device);
-                        setState(() => _connectedDevice = r.device);
+                        bool success = await widget.ble.connect(r.device);
+                        if (success) setState(() => _connectedDevice = r.device);
                       },
                       child: const Text('Bağlan'),
                     ),
@@ -83,73 +86,180 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             )
-          // 2. DURUM: Cihaz bağlıysa Tam Fonksiyonel LED Kontrol Paneli Göster
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    color: Colors.grey[900],
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        "Bağlı Cihaz: ${_connectedDevice!.name.isEmpty ? _connectedDevice!.id : _connectedDevice!.name}",
-                        style: const TextStyle(color: Colors.greenAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text("Hızlı Renk Seçimi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _colorButton("Kırmızı", const Color(0xFFFF0000), [255, 0, 0]),
-                      _colorButton("Yeşil", const Color(0xFF00FF00), [0, 255, 0]),
-                      _colorButton("Mavi", const Color(0xFF0000FF), [0, 0, 255]),
-                      _colorButton("Beyaz", const Color(0xFFFFFFFF), [255, 255, 255]),
-                    ],
-                  ),
-                  const SizedBox(height: 30),
-                  const Text("LED Efektleri ve Modlar", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
-                    icon: const Icon(Icons.animation),
-                    label: const Text("Özel Efekt Gönder"),
-                    onPressed: () {
-                      widget.ble.sendColor(_connectedDevice!, [255, 128, 0]);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
-                    icon: const Icon(Icons.flash_on),
-                    label: const Text("Çakar Modu (Strobe)"),
-                    onPressed: () {
-                      widget.ble.sendColor(_connectedDevice!, [255, 255, 0]);
-                    },
-                  ),
-                ],
-              ),
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRgbMatrixTab(),
+                _buildModesTab(),
+                _buildAnimationMenuTab(),
+              ],
             ),
     );
   }
 
-  Widget _colorButton(String label, Color color, List<int> rgbValues) {
-    return GestureDetector(
-      onTap: () => widget.ble.sendColor(_connectedDevice!, rgbValues),
-      child: Container(
-        width: 65,
-        height: 65,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 5, spreadRadius: 2)],
-        ),
+  // Sekme 1: Profesyonel Renk Matrisi ve Çemberi
+  Widget _buildRgbMatrixTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              color: Color.fromRGBO(_red.toInt(), _green.toInt(), _blue.toInt(), 1.0),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const Center(child: Text("Canlı Renk Önizleme", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+          ),
+          const SizedBox(height: 20),
+          _slider("Kırmızı (R)", _red, Colors.red, (v) => setState(() => _red = v)),
+          _slider("Yeşil (G)", _green, Colors.green, (v) => setState(() => _green = v)),
+          _slider("Mavi (B)", _blue, Colors.blue, (v) => setState(() => _blue = v)),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50), backgroundColor: Colors.blueAccent),
+            icon: const Icon(Icons.send),
+            label: const Text("Rengi Cihaza Uygula"),
+            onPressed: () => widget.ble.sendColor(_red.toInt(), _green.toInt(), _blue.toInt()),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _slider(String label, double value, Color color, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("$label: ${value.toInt()}", style: const TextStyle(color: Colors.white)),
+        Slider(value: value, min: 0, max: 255, activeColor: color, onChanged: (v) {
+          onChanged(v);
+          widget.ble.sendColor(_red.toInt(), _green.toInt(), _blue.toInt());
+        }),
+      ],
+    );
+  }
+
+  // Sekme 2: 50+ Mod ve Selamlama / Veda Ayarları
+  Widget _buildModesTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        const Text("50+ Efekt Modu", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 220,
+          child: GridView.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 2.5, crossAxisSpacing: 8, mainAxisSpacing: 8),
+            itemCount: 50,
+            itemBuilder: (context, index) {
+              int modeId = index + 1;
+              return ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[850], foregroundColor: Colors.white),
+                onPressed: () {
+                  setState(() => _selectedMode = modeId);
+                  widget.ble.sendMode(_selectedMode, _animationSpeed);
+                },
+                child: Text("Mod $modeId", style: const TextStyle(fontSize: 12)),
+              );
+            },
+          ),
+        ),
+        const Divider(color: Colors.grey, height: 30),
+        const Text("Selamlama (Açılış) ve Veda Ayarları", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          value: _welcomeMode,
+          dropdownColor: Colors.grey[900],
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(labelText: "Selamlama Modu Seç"),
+          items: ["Yavaş Renk Geçişi", "Flaş / Çakar", "Akan Şerit", "Nefes Alma"].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+          onChanged: (v) => setState(() => _welcomeMode = v!),
+        ),
+        Slider(
+          label: "Selamlama Süresi: ${_welcomeDuration.toStringAsFixed(1)}s",
+          value: _welcomeDuration, min: 1, max: 10, divisions: 9,
+          onChanged: (v) => setState(() => _welcomeDuration = v),
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          value: _farewellMode,
+          dropdownColor: Colors.grey[900],
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(labelText: "Veda (Kapanış) Modu Seç"),
+          items: ["Yavaş Renk Geçişi", "Flaş / Çakar", "Karartma", "Kapanış Efekti"].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+          onChanged: (v) => setState(() => _farewellMode = v!),
+        ),
+        Slider(
+          label: "Veda Süresi: ${_farewellDuration.toStringAsFixed(1)}s",
+          value: _farewellDuration, min: 1, max: 10, divisions: 9,
+          onChanged: (v) => setState(() => _farewellDuration = v),
+        ),
+      ],
+    );
+  }
+
+  // Sekme 3: Kayar LED (Addressable/SPI) Menüsü
+  Widget _buildAnimationMenuTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text("Kayar LED (Addressable SPI) Modları", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orangeAccent)),
+          const SizedBox(height: 15),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            icon: const Icon(Icons.waves),
+            label: const Text("Meteor Kayma Efekti"),
+            onPressed: () => widget.ble.sendMode(101, _animationSpeed),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            icon: const Icon(Icons.bolt),
+            label: const Text("Simge / Şimşek Akışı"),
+            onPressed: () => widget.ble.sendMode(102, _animationSpeed),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+            icon: const Icon(Icons.gradient),
+            label: const Text("Gökkuşağı Dalgalanması"),
+            onPressed: () => widget.ble.sendMode(103, _animationSpeed),
+          ),
+          const SizedBox(height: 20),
+          const Text("Animasyon Hızı Ayarı", style: TextStyle(color: Colors.white)),
+          Slider(
+            value: _animationSpeed.toDouble(), min: 1, max: 100, activeColor: Colors.orangeAccent,
+            onChanged: (v) {
+              setState(() => _animationSpeed = v.toInt());
+              widget.ble.sendMode(_selectedMode, _animationSpeed);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TabControllerBar extends StatelessWidget implements PreferredSizeWidget {
+  final TabController controller;
+  const TabControllerBar(this.controller, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return TabBar(
+      controller: controller,
+      tabs: const [
+        Tab(icon: Icon(Icons.palette), text: "RGB Matris"),
+        Tab(icon: Icon(Icons.list), text: "50+ Mod"),
+        Tab(icon: Icon(Icons.linear_scale), text: "Kayar LED"),
+      ],
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
