@@ -4,75 +4,59 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class BleService {
   BluetoothCharacteristic? _writeCharacteristic;
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
 
-  // 1. Tarama Başlatma (Android/iOS izin ve adaptör kontrolleriyle güçlendirilmiş)
+  // 1. Tarama Başlatma (Genişletilmiş filtre ve hata yakalama ile)
   Future<void> startScan() async {
     try {
-      // Bluetooth destekleniyor mu ve açık mı?
       if (await FlutterBluePlus.isSupported == false) {
-        print("Bluetooth bu cihazda desteklenmiyor.");
+        print("Cihaz Bluetooth desteklemiyor.");
         return;
       }
 
+      // Bluetooth kapalıysa tarama yapmaz
       var adapterState = await FlutterBluePlus.adapterState.first;
       if (adapterState != BluetoothAdapterState.on) {
-        print("Bluetooth kapalı! Lütfen açın.");
+        print("Bluetooth kapalı durumda.");
         return;
       }
 
-      // Tarama öncesi varsa eski taramayı durdur
+      // Önceki taramaları temizle
       await stopScan();
 
-      // Android için konum servislerinin açık olduğundan emin olunması gerekebilir
+      // Taramayı başlat (Süre ve Android konum optimizasyonu)
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
         androidUsesFineLocation: true,
       );
     } catch (e) {
-      print("Tarama başlatma hatası: $e");
+      print("Tarama başlatılırken hata oluştu: $e");
     }
   }
 
-  // 2. Taramayı Durdurma
   Future<void> stopScan() async {
     try {
       await FlutterBluePlus.stopScan();
-    } catch (e) {
-      print("Tarama durdurma hatası: $e");
-    }
+    } catch (_) {}
   }
 
-  // 3. Tarama Sonuçları Akışı
   Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
 
-  // 4. Cihaza Bağlanma ve Yazma Karakteristiğini Otomatik Bulma
+  // 2. Cihaza Bağlanma ve Karakteristik Keşfi
   Future<bool> connect(BluetoothDevice device) async {
     try {
       await stopScan();
       
-      // Cihaza bağlan
       await device.connect(
         autoConnect: false, 
         timeout: const Duration(seconds: 15),
       );
 
-      // Bağlantı koptuğunda temizlik yapmak için dinleyici eklenebilir
-      device.connectionState.listen((state) {
-        if (state == BluetoothConnectionState.disconnected) {
-          print("Cihaz bağlantısı koptu.");
-          _writeCharacteristic = null;
-        }
-      });
-
-      // MTU boyutunu artır (Veri akışının kararlılığı için)
       if (Platform.isAndroid) {
         try {
           await device.requestMtu(512);
         } catch (_) {}
       }
 
-      // Servisleri keşfet
       List<BluetoothService> services = await device.discoverServices();
       _writeCharacteristic = null;
 
@@ -84,88 +68,73 @@ class BleService {
           if (canWrite) {
             _writeCharacteristic = characteristic;
             
-            // Bildirimleri (Notify/Indicate) etkinleştirmeye çalış
             if (characteristic.properties.notify || characteristic.properties.indicate) {
               try {
                 await characteristic.setNotifyValue(true);
               } catch (_) {}
             }
 
-            // LED / Araç modüllerinde yaygın kullanılan yazma UUID'leri önceliği
             String uuidStr = characteristic.uuid.toString().toLowerCase();
+            // Piyasadaki tüm Çin tipi LED ve Bluetooth modüllerinin UUID anahtarları
             if (uuidStr.contains("ffe9") || 
                 uuidStr.contains("ffe1") || 
                 uuidStr.contains("ffd1") || 
                 uuidStr.contains("0003") || 
                 uuidStr.contains("fff2")) {
-              break; // En uygun olanı bulduk, döngüden çık
+              break; 
             }
           }
         }
         if (_writeCharacteristic != null) break;
       }
 
-      if (_writeCharacteristic != null) {
-        print("Başarılı: Yazma karakteristiği bulundu!");
-        return true;
-      } else {
-        print("Hata: Cihazda yazılabilir karakteristik bulunamadı.");
-        return false;
-      }
+      return _writeCharacteristic != null;
     } catch (e) {
-      print("Bağlantı Hatası: $e");
+      print("Bağlantı hatası: $e");
       return false;
     }
   }
 
-  // 5. Güvenli Paket Gönderim Motoru
+  // 3. Paket Gönderim Motoru
   Future<void> _writePacket(List<int> packet) async {
     if (_writeCharacteristic == null) {
-      print("Hata: Aktif yazma karakteristiği bulunamadı! Önce cihaza bağlanın.");
+      print("Yazma karakteristiği bulunamadı!");
       return;
     }
     try {
       bool withoutResponse = _writeCharacteristic!.properties.writeWithoutResponse;
       await _writeCharacteristic!.write(packet, withoutResponse: withoutResponse);
-      // Komutların üst üste binip modülü kilitlemesini önlemek için mini gecikme
       await Future.delayed(const Duration(milliseconds: 20));
     } catch (e) {
-      print("Komut iletim hatası: $e");
+      print("Paket gönderme hatası: $e");
     }
   }
 
-  // --- ARAYÜZ UYUMLU KOMUT METOTLARI (Hem set... hem send... destekler) ---
-
-  // Renk Komutu (RGB + Opsiyonel Parlaklık)
+  // 4. Kontrol Komutları (Hem set hem send alias destekli)
   Future<void> setColor(int red, int green, int blue, [int brightness = 255]) async {
     int checksum = (0x56 + red + green + blue + 0x00) & 0xFF;
     List<int> packet = [0x56, red, green, blue, 0x00, 0xF0, checksum];
     await _writePacket(packet);
   }
-  Future<void> sendColor(int red, int green, int blue, [int brightness = 255]) async => 
-      await setColor(red, green, blue, brightness);
+  Future<void> sendColor(int red, int green, int blue, [int brightness = 255]) async => setColor(red, green, blue, brightness);
 
-  // Güç Komutu (Açma / Kapatma)
   Future<void> setPower(bool isOn) async {
     List<int> packet = isOn ? [0xCC, 0x23, 0x33] : [0xCC, 0x24, 0x33];
     await _writePacket(packet);
   }
-  Future<void> sendPower(bool isOn) async => await setPower(isOn);
+  Future<void> sendPower(bool isOn) async => setPower(isOn);
 
-  // Mod Komutu (Efekt ID ve Hız)
   Future<void> setMode(int modeId, int speed) async {
     int safeSpeed = speed.clamp(1, 100);
     List<int> packet = [0xBB, modeId & 0xFF, safeSpeed, 0x44];
     await _writePacket(packet);
   }
-  Future<void> sendMode(int modeId, int speed) async => await setMode(modeId, speed);
+  Future<void> sendMode(int modeId, int speed) async => setMode(modeId, speed);
 
-  // Karşılama / Uğurlama Animasyon Komutu
   Future<void> setWelcomeFarewell(int type, int modeIndex, int durationSec) async {
     int safeDuration = durationSec.clamp(5, 120);
     List<int> packet = [0xDD, type & 0xFF, modeIndex & 0xFF, safeDuration & 0xFF, 0x55];
     await _writePacket(packet);
   }
-  Future<void> sendWelcomeFarewell(int type, int modeIndex, int durationSec) async => 
-      await setWelcomeFarewell(type, modeIndex, durationSec);
+  Future<void> sendWelcomeFarewell(int type, int modeIndex, int durationSec) async => setWelcomeFarewell(type, modeIndex, durationSec);
 }
