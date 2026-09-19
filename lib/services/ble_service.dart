@@ -5,43 +5,37 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 class BleService {
   BluetoothCharacteristic? _writeCharacteristic;
 
-  // 1. Tarama Başlatma (Genişletilmiş filtre ve hata yakalama ile)
+  // 1. Taramayı Başlat (Eski stabil çalışan sade yapı)
   Future<void> startScan() async {
     try {
-      if (await FlutterBluePlus.isSupported == false) {
-        print("Cihaz Bluetooth desteklemiyor.");
-        return;
-      }
-
-      // Bluetooth kapalıysa tarama yapmaz
+      if (await FlutterBluePlus.isSupported == false) return;
+      
       var adapterState = await FlutterBluePlus.adapterState.first;
-      if (adapterState != BluetoothAdapterState.on) {
-        print("Bluetooth kapalı durumda.");
-        return;
-      }
+      if (adapterState != BluetoothAdapterState.on) return;
 
-      // Önceki taramaları temizle
-      await stopScan();
-
-      // Taramayı başlat (Süre ve Android konum optimizasyonu)
+      await FlutterBluePlus.stopScan();
+      
+      // Herhangi bir filtre koymadan çevredeki TÜM cihazları tara
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
         androidUsesFineLocation: true,
       );
     } catch (e) {
-      print("Tarama başlatılırken hata oluştu: $e");
+      print("Tarama hatası: $e");
     }
   }
 
+  // 2. Taramayı Durdur
   Future<void> stopScan() async {
     try {
       await FlutterBluePlus.stopScan();
     } catch (_) {}
   }
 
+  // 3. Tarama Sonuçları Akışı (Arayüzün dinlediği ana akış)
   Stream<List<ScanResult>> get scanResults => FlutterBluePlus.scanResults;
 
-  // 2. Cihaza Bağlanma ve Karakteristik Keşfi
+  // 4. Cihaza Bağlan ve Yazma Özelliğini Bul
   Future<bool> connect(BluetoothDevice device) async {
     try {
       await stopScan();
@@ -73,16 +67,7 @@ class BleService {
                 await characteristic.setNotifyValue(true);
               } catch (_) {}
             }
-
-            String uuidStr = characteristic.uuid.toString().toLowerCase();
-            // Piyasadaki tüm Çin tipi LED ve Bluetooth modüllerinin UUID anahtarları
-            if (uuidStr.contains("ffe9") || 
-                uuidStr.contains("ffe1") || 
-                uuidStr.contains("ffd1") || 
-                uuidStr.contains("0003") || 
-                uuidStr.contains("fff2")) {
-              break; 
-            }
+            break; // İlk bulduğu yazılabilir karakteristiği alır ve durur
           }
         }
         if (_writeCharacteristic != null) break;
@@ -95,7 +80,7 @@ class BleService {
     }
   }
 
-  // 3. Paket Gönderim Motoru
+  // 5. Paket Gönderimi
   Future<void> _writePacket(List<int> packet) async {
     if (_writeCharacteristic == null) {
       print("Yazma karakteristiği bulunamadı!");
@@ -104,13 +89,14 @@ class BleService {
     try {
       bool withoutResponse = _writeCharacteristic!.properties.writeWithoutResponse;
       await _writeCharacteristic!.write(packet, withoutResponse: withoutResponse);
-      await Future.delayed(const Duration(milliseconds: 20));
+      await Future.delayed(const Duration(milliseconds: 15));
     } catch (e) {
-      print("Paket gönderme hatası: $e");
+      print("Komut gönderme hatası: $e");
     }
   }
 
-  // 4. Kontrol Komutları (Hem set hem send alias destekli)
+  // --- KOMUTLAR (Arayüz uyumlu tüm alternatifler) ---
+
   Future<void> setColor(int red, int green, int blue, [int brightness = 255]) async {
     int checksum = (0x56 + red + green + blue + 0x00) & 0xFF;
     List<int> packet = [0x56, red, green, blue, 0x00, 0xF0, checksum];
