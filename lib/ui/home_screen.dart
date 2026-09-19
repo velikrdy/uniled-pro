@@ -36,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E3A8A), // Görseldeki mavi tonu
+      backgroundColor: const Color(0xFF1E3A8A), // Mavi tonu
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Cihaz Tarama Ekranı (Lotus Lantern, Magic Home, ELK-BLEDOM filtreleme ve gösterimi)
+  // Cihaz Tarama Ekranı
   Widget _buildDeviceScanner() {
     return StreamBuilder<List<ScanResult>>(
       stream: widget.ble.scanResults,
@@ -91,15 +91,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildActiveTabContent() {
     switch (_currentIndex) {
       case 0:
-        return _buildAdjustTab(); // Ayarlamak (Renk Çemberi & Ön Ayarlar)
+        return _buildAdjustTab();
       case 1:
-        return _buildModesTab();  // Üslup (İsimli Modlar)
+        return _buildModesTab();
       case 2:
-        return _buildMusicTab();  // Müzik Senkron
+        return _buildMusicTab();
       case 3:
-        return _buildMicTab();    // Mikrofon Modu
+        return _buildMicTab();
       case 4:
-        return _buildTimerTab();  // Tarife / Zamanlayıcı
+        return _buildTimerTab();
       default:
         return _buildAdjustTab();
     }
@@ -128,9 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 10),
-        // Profesyonel Renk Çemberi Simülasyon Alanı
+        // Profesyonel Renk Çemberi Simülasyon Alanı (Hata Düzeltildi: 'child' parametresi kullanıldı)
         Center(
-          f: Container(
+          child: Container(
             width: 260, height: 260,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -255,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMicTab() => const Center(child: Text("Mikrofon Ses Duyarlılığı", style: TextStyle(color: Colors.white)));
   Widget _buildTimerTab() => const Center(child: Text("Tarife / Zamanlayıcı Ayarları", style: TextStyle(color: Colors.white)));
 
-  // Alt Sekme Çubuğu (Görseldeki Gibi)
+  // Alt Sekme Çubuğu
   Widget _buildBottomNavBar() {
     return BottomNavigationBar(
       currentIndex: _currentIndex,
